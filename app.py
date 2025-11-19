@@ -2,6 +2,8 @@ import streamlit as st
 import speech_recognition as sr
 import requests
 import uuid
+import tempfile
+import os
 
 st.set_page_config(page_title="🎤 Speech Translator", layout="centered")
 st.title("🎤 Speech → Text → Translator (Azure API)")
@@ -38,41 +40,50 @@ def translate_text(text, to_lang):
         return f"Error: {result}"
 
 # ---------------------------
-# Speech Recognition
+# Speech to Text using UPLOADED AUDIO
 # ---------------------------
-st.subheader("🎙️ Speak Something")
+def speech_to_text(audio_file):
+    recognizer = sr.Recognizer()
 
-recognizer = sr.Recognizer()
-
-def speech_to_text():
-    with sr.Microphone() as source:
-        st.info("🎧 Listening... Speak now!")
-        recognizer.adjust_for_ambient_noise(source)
-        audio = recognizer.listen(source)
+    with sr.AudioFile(audio_file) as source:
+        audio = recognizer.record(source)
 
     try:
-        st.success("Processing voice...")
         return recognizer.recognize_google(audio)
     except:
         return "Could not understand audio"
 
-# ---------------------------
-# Language Selection
-# ---------------------------
-to_lang = st.selectbox("Translate Speech Into:", 
-                       ["ur", "en", "ar", "fr", "de", "zh", "hi"])
 
 # ---------------------------
-# Run Speech to Translation
+# Audio Recorder
 # ---------------------------
-if st.button("🎤 Start Speaking"):
-    if not AZURE_KEY:
-        st.error("❌ Enter Azure Key in the sidebar")
+st.subheader("🎙️ Record Your Voice")
+
+audio_bytes = st.audio_input("Click to record your voice")
+
+to_lang = st.selectbox("Translate Into:", ["ur", "en", "ar", "fr", "de", "zh", "hi"])
+
+if st.button("🎤 Convert & Translate"):
+    if not audio_bytes:
+        st.error("Please record your voice first!")
+    elif not AZURE_KEY:
+        st.error("Enter Azure Key!")
     else:
-        text = speech_to_text()
+        # Save temp audio
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+            temp_audio.write(audio_bytes)
+            temp_audio_path = temp_audio.name
+
+        # Speech to Text
+        text = speech_to_text(temp_audio_path)
+
         st.write("### 📝 Recognized Text:")
         st.info(text)
 
+        # Translate
         translated = translate_text(text, to_lang)
         st.write("### 🌐 Translated Text:")
         st.success(translated)
+
+        # Cleanup
+        os.remove(temp_audio_path)
