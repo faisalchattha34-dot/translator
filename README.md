@@ -1,2 +1,4 @@
-# translator
-all language translator
+streamlit
+requests
+SpeechRecognition
+pydub
