@@ -17,14 +17,13 @@ AZURE_SPEECH_KEY = st.sidebar.text_input("Azure Speech Key", type="password")
 AZURE_SPEECH_REGION = st.sidebar.text_input("Azure Speech Region", "eastasia")
 OPENROUTER_KEY = st.sidebar.text_input("OpenRouter API Key", type="password")
 
-# LLM model
-LLM_MODEL = "google/gemma-3-27b-it:free"
-
-# Settings
+# ---------------------------
+# LLM & Language Settings
+# ---------------------------
+LLM_MODEL = "gpt-4o-mini"  # Safe OpenRouter model
 st.sidebar.header("🌐 Language Settings")
 speech_lang = st.sidebar.selectbox("Speech Input Language", ["en-US", "ur-PK", "hi-IN"])
 llm_lang = st.sidebar.selectbox("LLM Reply Language", ["en", "ur", "hi"])
-
 
 # ---------------------------
 # Azure Speech-to-Text
@@ -51,7 +50,6 @@ def speech_to_text(audio_file, language):
     result = response.json()
     return result.get("DisplayText", "Speech not recognized!")
 
-
 # ---------------------------
 # LLM Call (OpenRouter)
 # ---------------------------
@@ -63,10 +61,12 @@ def ask_llm(prompt):
         "Content-Type": "application/json"
     }
 
+    system_prompt = f"You are a helpful assistant. Always reply in {llm_lang} language."
+
     body = {
         "model": LLM_MODEL,
         "messages": [
-            {"role": "system", "content": f"Reply in {llm_lang} language."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ]
     }
@@ -74,11 +74,13 @@ def ask_llm(prompt):
     res = requests.post(url, headers=headers, json=body)
 
     if res.status_code != 200:
-        return f"OpenRouter Error: {res.text}"
+        return f"OpenRouter Error: {res.status_code} - {res.text}"
 
     data = res.json()
-    return data["choices"][0]["message"]["content"]
-
+    try:
+        return data["choices"][0]["message"]["content"]
+    except:
+        return f"OpenRouter Response Error: {data}"
 
 # ---------------------------
 # Azure Text-to-Speech
@@ -115,7 +117,6 @@ def text_to_speech(text, language):
 
     return response.content, None
 
-
 # ---------------------------
 # AUDIO INPUT
 # ---------------------------
@@ -131,22 +132,22 @@ if st.button("🎤 Process Voice"):
             temp_audio.write(audio_bytes.read())
             temp_path = temp_audio.name
 
-        # Convert Speech → Text
+        # Speech → Text
         user_text = speech_to_text(temp_path, speech_lang)
         st.write("### 📝 Recognized Speech:")
         st.info(user_text)
 
-        # LLM Response
-        llm_reply = ask_llm(user_text)
-        st.write("### 🤖 LLM Reply:")
-        st.success(llm_reply)
+        if not user_text.lower().startswith("azure stt error"):
+            # LLM Response
+            llm_reply = ask_llm(user_text)
+            st.write("### 🤖 LLM Reply:")
+            st.success(llm_reply)
 
-        # Convert Text → Speech
-        audio_output, err = text_to_speech(llm_reply, speech_lang)
-
-        if err:
-            st.error(err)
-        else:
-            st.audio(audio_output, format="audio/mp3")
+            # Text → Speech
+            audio_output, err = text_to_speech(llm_reply, speech_lang)
+            if err:
+                st.error(err)
+            else:
+                st.audio(audio_output, format="audio/mp3")
 
         os.remove(temp_path)
